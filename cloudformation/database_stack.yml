@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description:
+  Database Template.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    AllowedPattern: "[a-zA-Z0-9]+"
+
+  EnvironmentType:
+    Description: The type of the enviroment
+    Type: String
+    AllowedValues:
+      - LIVE
+      - STAGING
+      - DEV
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  DBSecurityGroup:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Enter a valid security group ID for DB
+
+  DatabaseUsername:
+    AllowedPattern: "[a-zA-Z0-9]+"
+    Default: TestCloud
+    ConstraintDescription: must be between 1 to 16 alphanumeric characters.
+    Description: The database admin account user name, between 1 to 16 alphanumeric characters.
+    MaxLength: 16
+    MinLength: 1
+    Type: String
+
+  DatabasePassword:
+    Default: TestCloudformation
+    ConstraintDescription: must be between 8 to 41 alphanumeric characters.
+    Description: The database admin account password, between 8 to 40 alphanumeric characters.
+    MaxLength: 40
+    MinLength: 8
+    NoEcho: true
+    Type: String
+
+  DBEnvironmentSize:
+    Description: DB instance type
+    Type: String
+    Default: db.t3.small
+    AllowedValues:
+      - db.t1.micro
+      - db.m1.small
+      - db.m1.medium
+      - db.m1.large
+      - db.m1.xlarge
+      - db.m2.xlarge
+      - db.m2.2xlarge
+      - db.m2.4xlarge
+      - db.m3.medium
+      - db.m3.large
+      - db.m3.xlarge
+      - db.m3.2xlarge
+      - db.m4.large
+      - db.m4.xlarge
+      - db.m4.2xlarge
+      - db.m4.4xlarge
+      - db.m4.10xlarge
+      - db.r3.large
+      - db.r3.xlarge
+      - db.r3.2xlarge
+      - db.r3.4xlarge
+      - db.r3.8xlarge
+      - db.m2.xlarge
+      - db.m2.2xlarge
+      - db.m2.4xlarge
+      - db.cr1.8xlarge
+      - db.t2.micro
+      - db.t2.small
+      - db.t2.medium
+      - db.t2.large
+      - db.t3.small
+      - db.t3.medium
+
+Conditions:
+  Standard:
+    !Equals [!Ref EnvironmentType, "LIVE"]
+  Serverless:
+    !Or [!Equals [!Ref EnvironmentType, STAGING], !Equals [!Ref EnvironmentType, DEV]]
+
+Resources:
+###########################################
+# Enhanced monitoring iam role
+##
+  MonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - monitoring.rds.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      RoleName: !Join ["-", [RdsEnhancedMonitoring-Role, !Ref EnvironmentType]]
+
+  ##############################################################
+  ## RDS
+  ##
+
+  ## RDS::Subnet Group
+  ###########################################
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: CloudFormation managed DB subnet group.
+      SubnetIds: !Ref Subnets
+
+  ## RDS::Cluster
+  ###########################################
+  DatabaseCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Snapshot
+    Condition: Standard
+    Properties:
+      Engine: aurora
+      MasterUsername: !Ref DatabaseUsername
+      MasterUserPassword: !Ref DatabasePassword
+      StorageEncrypted: True
+      BackupRetentionPeriod: 30
+      PreferredBackupWindow: 00:00-01:00
+      PreferredMaintenanceWindow: mon:01:30-mon:02:30
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VpcSecurityGroupIds: !Ref DBSecurityGroup
+      Tags:
+      -
+        Key: Env
+        Value: !Ref EnvironmentType
+
+    ## RDS::Instances
+  ###########################################
+  DatabasePrimaryInstance:
+    Type: AWS::RDS::DBInstance
+    Condition: Standard
+    Properties:
+      PubliclyAccessible: False
+      Engine: aurora
+      DBClusterIdentifier: !Ref DatabaseCluster
+      DBInstanceClass: !Ref DBEnvironmentSize
+      MonitoringRoleArn:
+        !GetAtt
+          - MonitoringRole
+          - Arn
+      MonitoringInterval: 60
+      Tags:
+      -
+        Key: Env
+        Value: !Ref EnvironmentType
+
+
+  DatabaseReplicaInstance:
+    Type: AWS::RDS::DBInstance
+    Condition: Standard
+    Properties:
+      PubliclyAccessible: False
+      Engine: aurora
+      DBClusterIdentifier: !Ref DatabaseCluster
+      DBInstanceClass: !Ref DBEnvironmentSize
+      MonitoringRoleArn:
+        !GetAtt
+          - MonitoringRole
+          - Arn
+      MonitoringInterval: 60
+      Tags:
+      -
+        Key: Env
+        Value: !Ref EnvironmentType
+
+  ServerlessCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Snapshot
+    Condition: Serverless
+    Properties:
+      Engine: aurora
+      EngineMode: serverless
+      ScalingConfiguration:
+        AutoPause: true
+        MaxCapacity: 1
+        MinCapacity: 1
+        SecondsUntilAutoPause: 3600
+      MasterUsername: !Ref DatabaseUsername
+      MasterUserPassword: !Ref DatabasePassword
+      DBClusterIdentifier: !Ref AWS::StackName
+      StorageEncrypted: True
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: 01:00-02:00
+      PreferredMaintenanceWindow: mon:03:00-mon:04:00
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VpcSecurityGroupIds: !Ref DBSecurityGroup
+
+Outputs:
+  DBCluster:
+    Description: Database Cluster
+    Condition: Standard
+    Value:
+      Ref: DatabaseCluster
+  DBEndpoint:
+    Description: "URL endpoint of database"
+    Condition: Standard
+    Value:
+      Fn::GetAtt: [ DatabaseCluster, Endpoint.Address ]

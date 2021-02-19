@@ -1,0 +1,374 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description:
+  Master Template.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    #Defines the grouping and ordering of input parameters when they are displayed in the AWS CloudFormation console. By default, the AWS CloudFormation console alphabetically sorts parameters by their logical ID. For more information, see AWS::CloudFormation::Interface.
+    ParameterGroups:
+      - Label:
+          default: Template Path
+        Parameters:
+          - TemplatePath
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - VPC
+          - Subnets
+      - Label:
+          default: Enviroment Configuration
+        Parameters:
+          - EnvironmentName
+          - EnvironmentType
+          - EC2InstanceSize
+          - EBSSize
+          - EC2KeyPair
+          - ALBName
+      - Label:
+          default: Database Configuration
+        Parameters:
+          - RDSrequired
+          - DatabaseUsername
+          - DatabasePassword
+          - DBEnvironmentSize
+      - Label:
+          default: CI-CD Configuration
+        Parameters:
+          - CICDrequired
+          - GitHubOwner
+          - GitHubRepo
+          - GitHubBranch
+          - GitHubToken
+          - GitHubLocation
+    ParameterLabels:
+      DatabaseUsername:
+        default: Database Username
+      DatabasePassword:
+        default: Database Password
+      DBEnvironmentSize:
+        default: Database Instance Size
+      EC2InstanceSize:
+        default: EC2 Instance type for live enviroment
+      EBSSize:
+        default: EBS Size for all enviroments
+
+
+Parameters:
+  TemplatePath:
+    Type: String
+    Description: S3Bucket Path where the templates are stored
+    Default: https://cf-templates-to9s2b0aij7h-eu-west-1.s3-eu-west-1.amazonaws.com/cfn/
+
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Default: test
+    Type: String
+    AllowedPattern: "[a-zA-Z0-9]+"
+
+  EnvironmentType:
+    Description: The type of the enviroment
+    Default: LIVE
+    Type: String
+    AllowedValues:
+      - LIVE
+      - STAGING
+      - DEV
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  EC2InstanceSize:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - hi1.4xlarge
+      - hs1.8xlarge
+      - cr1.8xlarge
+      - cc2.8xlarge
+      - cg1.4xlarge
+
+  EC2KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Choose which Key Pair to use on the enviroment
+
+  EBSSize:
+    Type: String
+    Default: 8
+
+  AutoScaling:
+    Type: String
+    Description: Is RDS stack required?
+    Default: Not Required
+    AllowedValues:
+      - Required
+      - Not Required
+
+  ALBName:
+    Type: String
+    Default: test
+    Description: Random string for ALB Name
+    AllowedPattern: "[a-zA-Z]+"
+
+  RDSrequired:
+    Type: String
+    Description: Is RDS stack required?
+    Default: Not Required
+    AllowedValues:
+      - Required
+      - Not Required
+
+  DatabaseUsername:
+    AllowedPattern: "[a-zA-Z0-9]+"
+    Default: TestCloud
+    ConstraintDescription: must be between 1 to 16 alphanumeric characters.
+    Description: The database admin account user name, between 1 to 16 alphanumeric characters.
+    MaxLength: 16
+    MinLength: 1
+    Type: String
+
+  DatabasePassword:
+    Default: TestCloudformation
+    ConstraintDescription: must be between 8 to 41 alphanumeric characters.
+    Description: The database admin account password, between 8 to 41 alphanumeric characters.
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+
+  DBEnvironmentSize:
+    Description: DB instance type
+    Type: String
+    Default: db.t3.small
+    AllowedValues:
+      - db.t1.micro
+      - db.m1.small
+      - db.m1.medium
+      - db.m1.large
+      - db.m1.xlarge
+      - db.m2.xlarge
+      - db.m2.2xlarge
+      - db.m2.4xlarge
+      - db.m3.medium
+      - db.m3.large
+      - db.m3.xlarge
+      - db.m3.2xlarge
+      - db.m4.large
+      - db.m4.xlarge
+      - db.m4.2xlarge
+      - db.m4.4xlarge
+      - db.m4.10xlarge
+      - db.r3.large
+      - db.r3.xlarge
+      - db.r3.2xlarge
+      - db.r3.4xlarge
+      - db.r3.8xlarge
+      - db.m2.xlarge
+      - db.m2.2xlarge
+      - db.m2.4xlarge
+      - db.cr1.8xlarge
+      - db.t2.micro
+      - db.t2.small
+      - db.t2.medium
+      - db.t2.large
+      - db.t3.small
+      - db.t3.medium
+
+  CICDrequired:
+    Type: String
+    Description: Is CI-CD stack required?
+    Default: Not Required
+    AllowedValues:
+      - Required
+      - Not Required
+
+  GitHubOwner:
+    Type: String
+    Default: account
+    Description: GitHub Account
+
+  GitHubRepo:
+    Type: String
+    Description: Repository Name
+    Default: test
+
+  GitHubBranch:
+    Type: String
+    Description: Branch Name
+    Default: master
+    AllowedValues:
+      - master
+      - staging
+      - develop
+
+  GitHubToken:
+    Type: String
+    Description: OAuthToken
+    NoEcho: true
+
+  GitHubLocation:
+    Type: String
+    Description: GitHub repo link
+
+Conditions:
+  isRDSrequired:
+    !Equals [!Ref RDSrequired, "Required"]
+  isCICDrequired:
+    !Equals [!Ref CICDrequired, "Required"]
+
+Resources:
+  SecurityStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Join ["", [!Ref TemplatePath, security_stack.yml]]
+      Parameters:
+        EnvName:
+          Ref: EnvironmentName
+        EnvType:
+          Ref: EnvironmentType
+        VPC:
+          Ref: VPC
+        Subnets: {"Fn::Join": [",", { "Ref": "Subnets" }]}
+        RDSrequired:
+          Ref: RDSrequired
+      Tags:
+        - Key: Name
+          Value: SecurityStack
+
+  WebServerStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL:  !Join ["", [!Ref TemplatePath, webserver_stack.yml]]
+      Parameters:
+        EnvName:
+          Ref: EnvironmentName
+        EnvType:
+          Ref: EnvironmentType
+        VPC:
+          Ref: VPC
+        Subnets: {"Fn::Join": [",", { "Ref": "Subnets" }]}
+        EC2Size:
+          Ref: EC2InstanceSize
+        EC2Key:
+          Ref: EC2KeyPair
+        EBSSizeWS:
+          Ref: EBSSize
+        ALBNameWS:
+          Ref: ALBName
+        RDSrequired:
+          Ref: RDSrequired
+        ALBSecurityGroup:
+          Fn::GetAtt: SecurityStack.Outputs.ALBSG
+        EC2SecurityGroup:
+          Fn::GetAtt: SecurityStack.Outputs.EC2SG
+      Tags:
+        - Key: Name
+          Value: WebServerStack
+
+  DatabaseStack:
+    Type: "AWS::CloudFormation::Stack"
+    Condition: isRDSrequired
+    Properties:
+      TemplateURL:  !Join ["", [!Ref TemplatePath, database_stack.yml]]
+      Parameters:
+        EnvironmentName:
+          Ref: EnvironmentName
+        EnvironmentType:
+          Ref: EnvironmentType
+        VPC:
+          Ref: VPC
+        Subnets: {"Fn::Join": [",", { "Ref": "Subnets" }]}
+        DBSecurityGroup:
+          Fn::GetAtt: SecurityStack.Outputs.DatabaseSecurityGroup
+        DatabaseUsername:
+          Ref: DatabaseUsername
+        DatabasePassword:
+          Ref: DatabasePassword
+        DBEnvironmentSize:
+          Ref: DBEnvironmentSize
+      Tags:
+        - Key: Name
+          Value: DatabaseStack
+
+  CICDStack:
+    Type: "AWS::CloudFormation::Stack"
+    Condition: isCICDrequired
+    DependsOn: WebServerStack
+    Properties:
+      TemplateURL:  !Join ["", [!Ref TemplatePath, CI-CD_stack.yml]]
+      Parameters:
+        EnvironmentName:
+          Ref: EnvironmentName
+        EnvironmentType:
+          Ref: EnvironmentType
+        GitHubOwner:
+          Ref: GitHubOwner
+        GitHubRepo:
+          Ref: GitHubRepo
+        GitHubBranch:
+          Ref: GitHubBranch
+        GitHubToken:
+          Ref: GitHubToken
+        GitHubLocation:
+          Ref: GitHubLocation
+      Tags:
+        - Key: Name
+          Value: CICDStack

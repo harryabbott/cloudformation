@@ -1,0 +1,319 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description:
+  WebServer Stack.
+
+Parameters:
+  EnvName:
+    Description: An environment name that will be prefixed to resource names
+    Default: TestCloudformation
+    Type: String
+    AllowedPattern: "[a-zA-Z0-9]+"
+
+  EnvType:
+    Description: The type of the enviroment
+    Type: String
+    AllowedValues:
+      - LIVE
+      - STAGING
+      - DEV
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  ALBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup::Id"
+    Description: Enter a valid security group ID for ALB
+
+  EC2SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup::Id"
+    Description: Enter a valid security group ID for WebServer
+
+  EC2Size:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - hi1.4xlarge
+      - hs1.8xlarge
+      - cr1.8xlarge
+      - cc2.8xlarge
+      - cg1.4xlarge
+
+  EC2Key:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Choose which Key Pair to use on the enviroment
+
+  EBSSizeWS:
+    Type: String
+    Default: 8
+
+  ALBNameWS:
+    Type: String
+    Description: Random string for ALB Name
+    AllowedPattern: "[a-zA-Z]+"
+
+  RDSrequired:
+    Type: String
+    Description: check if RDS is required
+
+Conditions:
+  ifRDS:
+    !Equals [!Ref RDSrequired, "Required"]
+
+Mappings:
+  RegionMap:
+    eu-west-1:
+      "Ubuntu" : "ami-035966e8adab4aaad" # Ubuntu 18.04 MAR 2020
+
+Resources:
+  ##############################################################
+  ## ROLES
+  ##
+
+  # ROLES::Policy Profile
+  ###########################################
+  EC2RoleProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        -
+          Ref: EC2Role
+
+  ## ROLES::EC2
+  ############################################
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+        - "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+        - "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      RoleName: !Join ["-", [EC2-Role, !Ref EnvType]]
+
+    ##############################################################
+  ## LOAD BALANCERS
+  ##
+
+  ## LOAD BALANCERS::S3
+  ############################################
+  ALBS3:
+    Type: AWS::S3::Bucket
+
+  ## LOAD BALANCERS::Bucket Policy
+  ############################################
+  LogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: ALBS3
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AWSConsole-AccessLogs-Policy-1553608619162
+        Statement:
+        - Sid: AWSConsoleStmt-1553608619162
+          Effect: Allow
+          Principal:
+            AWS: arn:aws:iam::156460612806:root
+          Action: s3:PutObject
+          Resource:
+            Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: ALBS3
+              - '/AWSLogs/'
+              - Ref: AWS::AccountId
+              - '/*'
+        - Sid: AWSLogDeliveryWrite
+          Effect: Allow
+          Principal:
+            Service: delivery.logs.amazonaws.com
+          Action: s3:PutObject
+          Resource:
+            Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: ALBS3
+              - '/AWSLogs/'
+              - Ref: AWS::AccountId
+              - '/*'
+          Condition:
+            StringEquals:
+              s3:x-amz-acl: bucket-owner-full-control
+        - Sid: AWSLogDeliveryAclCheck
+          Effect: Allow
+          Principal:
+            Service: delivery.logs.amazonaws.com
+          Action: s3:GetBucketAcl
+          Resource:
+            Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: ALBS3
+
+  ## LOAD BALANCERS::ALB
+  ############################################
+  BasicEC2LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref ALBNameWS
+      Subnets: !Ref Subnets
+      LoadBalancerAttributes:
+      - Key: deletion_protection.enabled
+        Value: true
+      - Key: access_logs.s3.enabled
+        Value: true
+      - Key: access_logs.s3.bucket
+        Value: !Ref ALBS3
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+          - Key: Name
+            Value: !Ref EnvName
+          - Key: Env
+            Value: !Ref EnvType
+    DependsOn: LogsBucketPolicy
+
+  ## LOAD BALANCERS::Listner
+  ############################################
+  BasicEC2LoadBalancerListner:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref BasicEC2LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref DefaultTargetGroup
+
+  ## LOAD BALANCERS::Target Group
+  ############################################
+  DefaultTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join ["-", [!Ref EnvName, !Ref EnvType]]
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200-499'
+      VpcId: !Ref VPC
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '10'
+      Targets:
+      - Id:
+          Ref: BasicEC2Instance
+        Port: 80
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref EnvName, !Ref EnvType]]
+
+  ##############################################################
+  ## EC2
+  ##
+  BasicEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: false
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", Ubuntu]
+      KeyName: !Ref EC2Key
+      Monitoring: true
+      InstanceType: !Ref EC2Size
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      IamInstanceProfile: !Ref EC2RoleProfile
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeType: "gp2"
+            DeleteOnTermination: "True"
+            VolumeSize: !Ref EBSSizeWS
+            Encrypted: True
+      Tags:
+        -
+          Key: Name
+          Value: !Join [" ", [!Ref EnvName, !Ref EnvType]]
+
+Outputs:
+  LoadBalancerId:
+    Value:
+      Ref: BasicEC2LoadBalancer
+  TargetGroupId:
+    Value:
+      Ref: DefaultTargetGroup

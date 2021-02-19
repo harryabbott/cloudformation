@@ -1,0 +1,364 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description:
+  CI-CD Stack Template.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Default: test
+    Type: String
+    AllowedPattern: "[a-zA-Z0-9]+"
+
+  EnvironmentType:
+    Description: The type of the enviroment
+    Default: LIVE
+    Type: String
+    AllowedValues:
+      - LIVE
+      - STAGING
+      - DEV
+
+  GitHubOwner:
+    Type: String
+    Default: account
+    Description: GitHub Account
+
+  GitHubRepo:
+    Type: String
+    Description: Repository Name
+
+
+  GitHubBranch:
+    Type: String
+    Description: Branch Name
+    AllowedValues:
+      - master
+      - staging
+      - develop
+
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: OAuthToken
+
+  GitHubLocation:
+    Type: String
+    Description: GitHub repo link
+
+Resources:
+
+  ## ROLES::CodeDeploy
+  ############################################
+  CodeDeployServiceIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - codedeploy.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      RoleName: !Join ["-", [CodeDeploy-Role, !Ref EnvironmentType]]
+
+ ## ROLES::CodeBuild
+ ############################################
+  CodeBuildIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      RoleName: !Join ["-", [CodeBuild-Role, !Ref EnvironmentType]]
+      Policies:
+        -
+          PolicyName: "CodeBuildPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+                  - "s3:PutObject"
+                Resource:
+                  - "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "codebuild:CreateReportGroup"
+                  - "codebuild:CreateReport"
+                  - "codebuild:UpdateReport"
+                  - "codebuild:BatchPutTestCases"
+                Resource: "*"
+
+
+  ## ROLES::CodePipeline
+  ############################################
+  CodePipelineIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codepipeline.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      RoleName: !Join ["-", [CodePipeline-Role, !Ref EnvironmentType]]
+      Policies:
+        -
+          PolicyName: "CodePipelinePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketVersioning"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                Resource:
+                  - "arn:aws:s3:::codepipeline*"
+                  - "arn:aws:s3:::elasticbeanstalk*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "codecommit:CancelUploadArchive"
+                  - "codecommit:GetBranch"
+                  - "codecommit:GetCommit"
+                  - "codecommit:GetUploadArchiveStatus"
+                  - "codecommit:UploadArchive"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "codedeploy:CreateDeployment"
+                  - "codedeploy:GetApplicationRevision"
+                  - "codedeploy:GetDeployment"
+                  - "codedeploy:GetDeploymentConfig"
+                  - "codedeploy:RegisterApplicationRevision"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "elasticbeanstalk:*"
+                  - "ec2:*"
+                  - "elasticloadbalancing:*"
+                  - "autoscaling:*"
+                  - "cloudwatch:*"
+                  - "s3:*"
+                  - "sns:*"
+                  - "cloudformation:*"
+                  - "rds:*"
+                  - "sqs:*"
+                  - "ecs:*"
+                  - "iam:PassRole"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                  - "lambda:ListFunctions"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "opsworks:CreateDeployment"
+                  - "opsworks:DescribeApps"
+                  - "opsworks:DescribeCommands"
+                  - "opsworks:DescribeDeployments"
+                  - "opsworks:DescribeInstances"
+                  - "opsworks:DescribeStacks"
+                  - "opsworks:UpdateApp"
+                  - "opsworks:UpdateStack"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "cloudformation:CreateStack"
+                  - "cloudformation:DeleteStack"
+                  - "cloudformation:DescribeStacks"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:CreateChangeSet"
+                  - "cloudformation:DeleteChangeSet"
+                  - "cloudformation:DescribeChangeSet"
+                  - "cloudformation:ExecuteChangeSet"
+                  - "cloudformation:SetStackPolicy"
+                  - "cloudformation:ValidateTemplate"
+                  - "iam:PassRole"
+                Resource: "*"
+              -
+                  Effect: "Allow"
+                  Action:
+                    - "codebuild:BatchGetBuilds"
+                    - "codebuild:StartBuild"
+                  Resource: "*"
+              -
+                  Effect: "Allow"
+                  Action:
+                    - "devicefarm:ListProjects"
+                    - "devicefarm:ListDevicePools"
+                    - "devicefarm:GetRun"
+                    - "devicefarm:GetUpload"
+                    - "devicefarm:CreateUpload"
+                    - "devicefarm:ScheduleRun"
+                  Resource: "*"
+
+    ## CODE DEPLOY::Application
+  ###########################################
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Join ["-", [!Ref EnvironmentName, !Ref EnvironmentType]]
+
+  ## CODE DEPLOY::Deployment Group
+  ###########################################
+  BasicDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: !Join ["-", [!Ref EnvironmentName, !Ref EnvironmentType]]
+      Ec2TagFilters:
+        -
+          Key: Name
+          Value: !Join [" ", [!Ref EnvironmentName, !Ref EnvironmentType]]
+          Type: "KEY_AND_VALUE"
+      LoadBalancerInfo:
+          ElbInfoList:
+            - Name: !Ref EnvironmentName
+      ServiceRoleArn:
+        !GetAtt
+          - CodeDeployServiceIAMRole
+          - Arn
+
+ ## CODE BUILD
+ ###########################################
+  # CodeBuildCredentials:
+  #   Type: AWS::CodeBuild::SourceCredential
+  #   Properties:
+  #     AuthType: PERSONAL_ACCESS_TOKEN
+  #     ServerType: GITHUB
+  #     Token: !Ref GitHubToken
+
+  CodeBuild:
+    Type: AWS::CodeBuild::Project
+    DependsOn: CodeBuildIAMRole
+    Properties:
+      Name: !Join ["-", [!Ref EnvironmentName, !Ref EnvironmentType]]
+      ServiceRole: !Ref CodeBuildIAMRole
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:4.0
+        Type: LINUX_CONTAINER
+      Source:
+        Type: GITHUB
+        Location: !Ref GitHubLocation
+
+  ##############################################################
+  ## CODE PIPLINE
+  ##
+
+  ### CODE PIPLINE
+  ###########################################
+  LivePipelineS3:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  LivePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Join ["-", [!Ref EnvironmentName, !Ref EnvironmentType]]
+      RoleArn:
+        !GetAtt
+          - CodePipelineIAMRole
+          - Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref LivePipelineS3
+      Stages:
+      - Name: Source
+        Actions:
+        - Name: Source
+          ActionTypeId:
+            Category: Source
+            Owner: ThirdParty
+            Version: 1
+            Provider: GitHub
+          OutputArtifacts:
+            - Name: SourceArtifact
+          Configuration:
+            Owner: !Ref GitHubOwner
+            Repo: !Ref GitHubRepo
+            Branch: !Ref GitHubBranch
+            OAuthToken: !Ref GitHubToken
+      - Name: Build
+        Actions:
+        - Name: Build
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Provider: CodeBuild
+            Version: 1
+          InputArtifacts:
+            - Name: SourceArtifact
+          OutputArtifacts:
+            - Name: BuildArtifact
+          Configuration:
+              ProjectName: !Ref CodeBuild
+      - Name: Deploy
+        Actions:
+        - Name: Deploy
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CodeDeploy
+            Version: 1
+          InputArtifacts:
+            - Name: BuildArtifact
+          Configuration:
+              ApplicationName: !Ref CodeDeployApplication
+              DeploymentGroupName: !Join ["-", [!Ref EnvironmentName, !Ref EnvironmentType]]
